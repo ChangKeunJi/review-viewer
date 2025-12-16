@@ -1,0 +1,769 @@
+<!-- 
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>App Store Review Fetcher</title>
+    <style>
+        :root {
+            --primary: #007AFF;
+            --bg: #f5f5f7;
+            --card-bg: #ffffff;
+            --text: #1d1d1f;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .container {
+            max-width: 600px;
+            width: 100%;
+        }
+
+        /* Controls Section */
+        .controls {
+            background: var(--card-bg);
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .input-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        label {
+            font-size: 12px;
+            font-weight: 600;
+            color: #86868b;
+            margin-bottom: 5px;
+            text-transform: uppercase;
+        }
+
+        input[type="text"] {
+            padding: 10px;
+            font-size: 16px;
+            border: 1px solid #d2d2d7;
+            border-radius: 8px;
+            outline: none;
+        }
+
+        input[type="text"]:focus {
+            border-color: var(--primary);
+        }
+
+        .action-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .page-control {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: #eee;
+            padding: 5px;
+            border-radius: 8px;
+        }
+
+        button {
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            font-size: 16px;
+            font-weight: 500;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+
+        button:hover {
+            opacity: 0.9;
+        }
+
+        button.small-btn {
+            padding: 5px 12px;
+            font-size: 14px;
+        }
+
+        #page-display {
+            font-weight: bold;
+            min-width: 20px;
+            text-align: center;
+        }
+
+        /* Results Section */
+        .results-list {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .review-card {
+            background: var(--card-bg);
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+            border-left: 5px solid #ccc;
+        }
+
+        .rating-1 {
+            border-left-color: #ff3b30;
+        }
+
+        /* Red */
+        .rating-2 {
+            border-left-color: #ff9500;
+        }
+
+        /* Orange */
+        .rating-3 {
+            border-left-color: #ffcc00;
+        }
+
+        /* Yellow */
+        .rating-4 {
+            border-left-color: #34c759;
+        }
+
+        /* Green */
+        .rating-5 {
+            border-left-color: #007AFF;
+        }
+
+        /* Blue */
+
+        .rating-badge {
+            font-weight: bold;
+            margin-bottom: 8px;
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.9em;
+            background: #eee;
+        }
+
+        .review-text {
+            line-height: 1.5;
+            white-space: pre-wrap;
+        }
+
+        .status-msg {
+            text-align: center;
+            color: #86868b;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container">
+        <h2>App Store Review Viewer</h2>
+
+        <div class="controls">
+            <div class="input-group">
+                <label for="appId">App ID</label>
+                <input type="text" id="appId" value="6474421906">
+            </div>
+
+            <div class="action-row">
+                <div class="page-control">
+                    <button class="small-btn" id="btn-prev">-</button>
+                    <span id="page-display">1</span>
+                    <button class="small-btn" id="btn-next">+</button>
+                </div>
+                <button id="btn-fetch">Fetch Reviews</button>
+            </div>
+        </div>
+
+        <div id="results" class="results-list">
+            <div class="status-msg">Click Fetch to load reviews.</div>
+        </div>
+    </div>
+
+    <script>
+        // State variables
+        let currentPage = 1;
+
+        // DOM Elements
+        const appIdInput = document.getElementById('appId');
+        const pageDisplay = document.getElementById('page-display');
+        const btnPrev = document.getElementById('btn-prev');
+        const btnNext = document.getElementById('btn-next');
+        const btnFetch = document.getElementById('btn-fetch');
+        const resultsContainer = document.getElementById('results');
+
+        // 1. Page Control Logic
+        btnPrev.addEventListener('click', () => {
+            if (currentPage > 1) {
+                currentPage--;
+                updatePageDisplay();
+            }
+        });
+
+        btnNext.addEventListener('click', () => {
+            currentPage++;
+            updatePageDisplay();
+        });
+
+        function updatePageDisplay() {
+            pageDisplay.textContent = currentPage;
+        }
+
+        // 2. Fetch Logic
+        btnFetch.addEventListener('click', fetchReviews);
+
+        async function fetchReviews() {
+            const appId = appIdInput.value.trim();
+            if (!appId) {
+                alert("Please enter an App ID");
+                return;
+            }
+
+            resultsContainer.innerHTML = '<div class="status-msg">Loading...</div>';
+
+            // Construct the iTunes URL
+            // const itunesUrl = `https://itunes.apple.com/rss/customerreviews/id=${appId}/page=${currentPage}/sortby=mostrecent/xml`;
+
+            // Use a CORS proxy to bypass browser restrictions
+            // const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(itunesUrl)}`;
+
+            const itunesUrl = `https://itunes.apple.com/rss/customerreviews/id=${appId}/page=${currentPage}/sortby=mostrecent/xml`;
+
+            try {
+                // const response = await fetch(proxyUrl);
+                const response = await fetch(itunesUrl);
+
+                if (!response.ok) throw new Error('Network response was not ok');
+
+                const strXML = await response.text();
+                parseAndDisplay(strXML);
+
+            } catch (error) {
+                console.error(error);
+                resultsContainer.innerHTML = `<div class="status-msg" style="color:red">Error fetching data. Check App ID or Page number.</div>`;
+            }
+        }
+
+        // 3. Parse and Sort Logic
+        function parseAndDisplay(xmlString) {
+            const parser = new DOMParser();
+            const xmlDoc = parser.parseFromString(xmlString, "text/xml");
+
+            const entries = xmlDoc.getElementsByTagName("entry");
+
+            // If no entries found (or only the feed info entry exists)
+            if (entries.length <= 1) {
+                // Note: Index 0 is often the Feed metadata, actual reviews start after.
+                // However, sometimes if page is empty, it returns just metadata.
+                resultsContainer.innerHTML = '<div class="status-msg">No reviews found on this page.</div>';
+                return;
+            }
+
+            let reviews = [];
+
+            // Loop through entries. Usually entry[0] is feed metadata, reviews start at 1.
+            // We check specifically for content and rating to be safe.
+            for (let i = 0; i < entries.length; i++) {
+                const entry = entries[i];
+
+                // Extract Content
+                const contentTag = entry.getElementsByTagName("content")[0];
+                const content = contentTag ? contentTag.textContent : "";
+
+                // Extract Rating (it is namespaced as im:rating)
+                // We try specific tag name first, generic fallback if needed
+                let ratingTag = entry.getElementsByTagName("im:rating")[0];
+                if (!ratingTag) ratingTag = entry.getElementsByTagName("rating")[0]; // Fallback
+
+                const rating = ratingTag ? parseInt(ratingTag.textContent) : null;
+
+                // Only add if it looks like a valid review (has rating)
+                if (rating !== null) {
+                    reviews.push({ rating, content });
+                }
+            }
+
+            // 4. Sorting: Lowest to Highest
+            reviews.sort((a, b) => a.rating - b.rating);
+
+            // 5. Render
+            renderReviews(reviews);
+        }
+
+        function renderReviews(reviews) {
+            resultsContainer.innerHTML = ''; // Clear loading
+
+            if (reviews.length === 0) {
+                resultsContainer.innerHTML = '<div class="status-msg">No reviews extracted.</div>';
+                return;
+            }
+
+            reviews.forEach(review => {
+                const card = document.createElement('div');
+                card.className = `review-card rating-${review.rating}`;
+
+                const badge = document.createElement('div');
+                badge.className = 'rating-badge';
+                badge.textContent = `★ ${review.rating}`;
+
+                const text = document.createElement('div');
+                text.className = 'review-text';
+                text.textContent = review.content;
+
+                card.appendChild(badge);
+                card.appendChild(text);
+                resultsContainer.appendChild(card);
+            });
+        }
+    </script>
+</body>
+
+</html>
+
+ -->
+
+
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>App Store Review Fetcher</title>
+    <style>
+        :root {
+            --primary: #0A84FF;
+            --bg: #000000;
+            --card-bg: #1C1C1E;
+            --text: #FFFFFF;
+            --text-secondary: #98989D;
+            --border: #38383A;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .container {
+            max-width: 600px;
+            width: 100%;
+        }
+
+        h2 {
+            color: var(--text);
+        }
+
+        /* Controls Section */
+        .controls {
+            background: var(--card-bg);
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+            margin-bottom: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .control-row {
+            display: flex;
+            gap: 15px;
+            align-items: flex-end;
+        }
+
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            flex-grow: 1;
+        }
+
+        label {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            margin-bottom: 5px;
+            text-transform: uppercase;
+        }
+
+        input[type="text"] {
+            padding: 12px;
+            font-size: 16px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            outline: none;
+            background-color: #2C2C2E;
+            color: var(--text);
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        input[type="text"]:focus {
+            border-color: var(--primary);
+        }
+
+        .pagination-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #2C2C2E;
+            padding: 10px 15px;
+            border-radius: 10px;
+        }
+
+        button {
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 16px;
+            font-weight: 600;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        button:hover {
+            opacity: 0.9;
+            transform: translateY(-1px);
+        }
+
+        button:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        #page-display {
+            font-weight: bold;
+            font-size: 16px;
+            min-width: 80px;
+            text-align: center;
+            color: var(--text);
+        }
+
+        /* Segmented Control */
+        .segmented-control {
+            display: flex;
+            background: #1C1C1E;
+            border: 1px solid var(--border);
+            padding: 4px;
+            border-radius: 8px;
+            margin-top: 5px;
+        }
+
+        .segment-btn {
+            flex: 1;
+            background: transparent;
+            color: var(--text-secondary);
+            padding: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .segment-btn:hover {
+            opacity: 1;
+            background: rgba(255, 255, 255, 0.05);
+            transform: none;
+        }
+
+        .segment-btn.active {
+            background: #636366;
+            color: white;
+            font-weight: 600;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        /* Results Section */
+        .results-list {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .review-card {
+            background: var(--card-bg);
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+            border-left: 5px solid #ccc;
+        }
+
+        .rating-1 {
+            border-left-color: #FF453A;
+        }
+
+        /* Red */
+        .rating-2 {
+            border-left-color: #FF9F0A;
+        }
+
+        /* Orange */
+        .rating-3 {
+            border-left-color: #FFD60A;
+        }
+
+        /* Yellow */
+        .rating-4 {
+            border-left-color: #32D74B;
+        }
+
+        /* Green */
+        .rating-5 {
+            border-left-color: #0A84FF;
+        }
+
+        /* Blue */
+
+        .rating-badge {
+            font-weight: bold;
+            margin-bottom: 8px;
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.9em;
+            background: #2C2C2E;
+            color: var(--text);
+        }
+
+        .review-text {
+            line-height: 1.5;
+            white-space: pre-wrap;
+            color: var(--text);
+        }
+
+        .status-msg {
+            text-align: center;
+            color: var(--text-secondary);
+            margin-top: 20px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container">
+        <h2>App Store Review Viewer</h2>
+
+        <div class="controls">
+            <div class="control-row">
+                <div class="input-group">
+                    <label for="appId">App ID</label>
+                    <input type="text" id="appId" value="" placeholder="Enter App ID">
+                </div>
+                <button id="btn-fetch">Fetch Reviews</button>
+            </div>
+
+            <div class="pagination-row">
+                <button id="btn-prev">&lt; Back</button>
+                <span id="page-display">Page 1</span>
+                <button id="btn-next">Forward &gt;</button>
+            </div>
+
+            <div class="segmented-control">
+                <button class="segment-btn active" id="sort-asc" onclick="setSort('asc')">Worst to Best</button>
+                <button class="segment-btn" id="sort-desc" onclick="setSort('desc')">Best to Worst</button>
+            </div>
+        </div>
+
+        <div id="results" class="results-list">
+            <div class="status-msg">Click Fetch to load reviews.</div>
+        </div>
+    </div>
+
+    <script>
+        // State variables
+        let currentPage = 1;
+        let currentSort = 'asc'; // 'asc' = Worst to Best, 'desc' = Best to Worst
+        let currentReviews = [];
+
+        // DOM Elements
+        const appIdInput = document.getElementById('appId');
+        const pageDisplay = document.getElementById('page-display');
+        const btnPrev = document.getElementById('btn-prev');
+        const btnNext = document.getElementById('btn-next');
+        const btnFetch = document.getElementById('btn-fetch');
+        const resultsContainer = document.getElementById('results');
+        const btnSortAsc = document.getElementById('sort-asc');
+        const btnSortDesc = document.getElementById('sort-desc');
+
+        // 1. Page Control Logic
+        // Initialize button state
+        updatePageDisplay();
+
+        btnPrev.addEventListener('click', () => {
+            if (currentPage > 1) {
+                currentPage--;
+                updatePageDisplay();
+                fetchReviews();
+            }
+        });
+
+        btnNext.addEventListener('click', () => {
+            currentPage++;
+            updatePageDisplay();
+            fetchReviews();
+        });
+
+        function updatePageDisplay() {
+            pageDisplay.textContent = `Page ${currentPage}`;
+            btnPrev.disabled = (currentPage === 1);
+        }
+
+        // 2. Sort Logic
+        function setSort(order) {
+            if (currentSort === order) return;
+
+            currentSort = order;
+
+            // Update UI
+            if (order === 'asc') {
+                btnSortAsc.classList.add('active');
+                btnSortDesc.classList.remove('active');
+            } else {
+                btnSortAsc.classList.remove('active');
+                btnSortDesc.classList.add('active');
+            }
+
+            // Re-sort and render current data
+            if (currentReviews.length > 0) {
+                applySortAndRender();
+            }
+        }
+
+        function applySortAndRender() {
+            if (currentSort === 'asc') {
+                currentReviews.sort((a, b) => a.rating - b.rating);
+            } else {
+                currentReviews.sort((a, b) => b.rating - a.rating);
+            }
+            renderReviews(currentReviews);
+        }
+
+        // 3. Fetch Logic
+        btnFetch.addEventListener('click', fetchReviews);
+
+        async function fetchReviews() {
+            const appId = appIdInput.value.trim();
+            if (!appId) {
+                alert("Please enter an App ID");
+                return;
+            }
+
+            resultsContainer.innerHTML = '<div class="status-msg">Loading...</div>';
+
+            const itunesUrl = `https://itunes.apple.com/rss/customerreviews/id=${appId}/page=${currentPage}/sortby=mostrecent/xml`;
+
+            // Use corsproxy.io which is often more reliable
+            const proxyUrl = `https://corsproxy.io/?` + encodeURIComponent(itunesUrl);
+
+            try {
+                const response = await fetch(proxyUrl);
+
+                if (!response.ok) {
+                    throw new Error(`Network error: ${response.status} ${response.statusText}`);
+                }
+
+                const strXML = await response.text();
+                parseAndDisplay(strXML);
+
+            } catch (error) {
+                console.error(error);
+                resultsContainer.innerHTML = `<div class="status-msg" style="color:#FF453A">Error: ${error.message}.<br>Check App ID or try again later.</div>`;
+            }
+        }
+
+        // 4. Parse and Sort Logic
+        function parseAndDisplay(xmlString) {
+            const parser = new DOMParser();
+            const xmlDoc = parser.parseFromString(xmlString, "text/xml");
+
+            const entries = xmlDoc.getElementsByTagName("entry");
+
+            if (entries.length <= 1) {
+                resultsContainer.innerHTML = '<div class="status-msg">No reviews found on this page.</div>';
+                currentReviews = [];
+                return;
+            }
+
+            let reviews = [];
+
+            for (let i = 0; i < entries.length; i++) {
+                const entry = entries[i];
+
+                const contentTag = entry.getElementsByTagName("content")[0];
+                const content = contentTag ? contentTag.textContent : "";
+
+                let ratingTag = entry.getElementsByTagName("im:rating")[0];
+                if (!ratingTag) ratingTag = entry.getElementsByTagName("rating")[0];
+
+                const rating = ratingTag ? parseInt(ratingTag.textContent) : null;
+
+                if (rating !== null) {
+                    reviews.push({ rating, content });
+                }
+            }
+
+            // Store and Render
+            currentReviews = reviews;
+            applySortAndRender();
+        }
+
+        function renderReviews(reviews) {
+            resultsContainer.innerHTML = '';
+
+            if (reviews.length === 0) {
+                resultsContainer.innerHTML = '<div class="status-msg">No reviews extracted.</div>';
+                return;
+            }
+
+            reviews.forEach(review => {
+                const card = document.createElement('div');
+                card.className = `review-card rating-${review.rating}`;
+
+                const badge = document.createElement('div');
+                badge.className = 'rating-badge';
+                badge.textContent = `★ ${review.rating}`;
+
+                const text = document.createElement('div');
+                text.className = 'review-text';
+                text.textContent = review.content;
+
+                card.appendChild(badge);
+                card.appendChild(text);
+                resultsContainer.appendChild(card);
+            });
+        }
+    </script>
+</body>
+
+</html>
